@@ -5,8 +5,7 @@ from queue import Queue
 from typing import Final
 from office365.runtime.auth.authentication_context import AuthenticationContext
 from office365.sharepoint.client_context import ClientContext
-
-
+import asyncio
 import os
 
 # .env dosyasından gerekli bilgileri yükle
@@ -18,18 +17,22 @@ username = os.getenv("SHAREPOINT_USERNAME")
 password = os.getenv("SHAREPOINT_PASSWORD")
 #token=os.getenv("TELEGRAM_BOT_TOKEN")
 
-# SharePoint ile iletişim kurmak için gerekli fonksiyonlar
-async def upload_to_sharepoint(file_path):
+async def upload_to_sharepoint(file):
     ctx_auth = AuthenticationContext(url=sharepoint_url)
     if ctx_auth.acquire_token_for_user(username, password):
         ctx = ClientContext(sharepoint_url, ctx_auth)
-        target_folder = ctx.web.lists.get_by_title("Documents").root_folder
-        with open(file_path, "rb") as file_content:
-            target_file = target_folder.upload_file(os.path.basename(file_path), file_content)
+        library_name = "IRDDmler"  # SharePoint kütüphane adı
+        folder_url = f"/sites/{library_name}/Shared%20Documents/Bussiness%20Intelligence/tgbot/"  # Klasör yolunu burada belirtin https://hayratyardim.sharepoint.com/sites/IRDDmler/Shared%20Documents/Bussiness%20Intelligence/tgbot/Book.xlsx?web=1
+        target_folder = ctx.web.get_folder_by_server_relative_url(folder_url)
+        with open(file, "rb") as file_content:
+            target_file = target_folder.upload_file(os.path.basename(file), file_content)
             ctx.execute_query()
             print("Dosya SharePoint'e yüklendi:", target_file.serverRelativeUrl)
+            return True
+    print("Dosya SharePoint'e yüklenemedi.")
+    return False
   
-TOKEN: Final = "6640784429:AAGZQurTt4azkxFDExfrhuEbIJBrGrErCVc"
+TOKEN: Final = "6640784429:AAFDHRVvLlsdnRimj6s2vx86bdoXYe_Qz7U"
 
 # Program ve ülke listelerini tanımla
 programs = ['Acil Yardım', 'Kurban', 'Yetim', 'Su Kuyusu', 'Eğitim', 'Kuran', 'Sağlık', 'Sürdürülebilir Kalkınma', 'Ramazan']
@@ -40,6 +43,7 @@ tag_options = [f"{program}-{country}" for program in programs for country in cou
 
 # Tagları belirlemek için bir conversation handler oluştur
 TAG_SELECTION_PROGRAM, TAG_SELECTION_COUNTRY, FILE_UPLOAD = range(3)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE): 
     reply_keyboard_programs = [[program] for program in programs]
@@ -68,30 +72,13 @@ async def tag_selection_country(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data['selected_tag'] = tag
     return FILE_UPLOAD
 
-async def upload_to_sharepoint(file_path):
-    ctx_auth = AuthenticationContext(url=sharepoint_url)
-    if ctx_auth.acquire_token_for_user(username, password):
-        ctx = ClientContext(sharepoint_url, ctx_auth)
-        target_folder = ctx.web.lists.get_by_title("Documents").root_folder
-        with open(file_path, "rb") as file_content:
-            target_file = target_folder.upload_file(os.path.basename(file_path), file_content)
-            ctx.execute_query()
-            print("Dosya SharePoint'e yüklendi:", target_file.serverRelativeUrl)
-            return True  # Yükleme başarılı olduysa True döndür
-    print("Dosya SharePoint'e yüklenemedi.")
-    return False  # Yükleme başarısız olduysa False döndür
 
 async def file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Dosya nesnesini al
-    file = update.message.document.get_file()
-    file_name = file.file_name
-
-    # Dosyayı indir
-    file_path = os.path.join(os.getcwd(), file_name)
-    file.download(file_path)
+    file = await update.message.document.get_file()
 
     # Dosyayı SharePoint'e yükle
-    if await upload_to_sharepoint(file_path):
+    if await upload_to_sharepoint(file):
         # Başarılı bir şekilde yüklendiği durumunda kullanıcıya mesaj gönder
         await update.message.reply_text("Dosya başarıyla yüklendi ve tag ile ilişkilendirildi.")
     else:
@@ -104,16 +91,20 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('İşlem iptal edildi.', reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
+async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        print(f'Update {update} caused error {context.error}')
+
 
 if __name__ == '__main__':
    # Telegram botu oluştur
+    print('Starting bot...')
     app = Application.builder().token(token=TOKEN).build()
 
     # Kuyruk oluştur
-    update_queue = Queue()
+    #update_queue = Queue()
 
     # Application'ı başlat
-    # application = app(bot=app, update_queue=update_queue)
+    #application = app(bot=app, update_queue=update_queue)
     
     # Conversation handler'ı oluştur
     conv_handler = ConversationHandler(
@@ -130,5 +121,9 @@ if __name__ == '__main__':
     app.add_handler(conv_handler)
     
     # Bot'u çalıştır
+    # Errors
+    app.add_error_handler(error)
+    # Polls 
+    print('Polling...')
     app.run_polling()
     app.stop_running()
