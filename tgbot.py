@@ -121,7 +121,7 @@ if __name__ == '__main__':
         states={
             TAG_SELECTION_PROGRAM: [MessageHandler(filters.Regex('^(' + '|'.join(programs) + ')$'), tag_selection_program)],
             TAG_SELECTION_COUNTRY: [MessageHandler(filters.Regex('^(' + '|'.join(countries) + ')$'), tag_selection_country)],
-            FILE_UPLOAD: [MessageHandler(filters.Document, file_upload)]
+            FILE_UPLOAD: [MessageHandler(filters.Document.ALL, file_upload)]
         },
         fallbacks=[CommandHandler('cancel', cancel)]
     )
@@ -130,5 +130,5 @@ if __name__ == '__main__':
     app.add_handler(conv_handler)
     
     # Bot'u çalıştır
-    app.run_polling(5)
+    app.run_polling()
     app.stop_running()
